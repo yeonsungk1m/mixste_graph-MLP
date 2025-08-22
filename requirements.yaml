@@ -1,0 +1,33 @@
+name: MixSTE
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+  - defaults
+
+dependencies:
+  # ---- Python & CUDA & PyTorch (CUDA 11.1 빌드) ----
+  - python=3.8
+  - cudatoolkit=11.1
+  - pytorch=1.8.1
+  - torchvision=0.9.1
+
+  # ---- 기본 러UNTIME (conda) ----
+  - numpy=1.19
+  - pandas=1.1.*
+  - matplotlib=3.3.*
+  - pyyaml=5.3.1
+  - tqdm=4.54.1
+  - pip<24
+
+  # ---- 나머지 (pip) ----
+  - pip:
+      - scipy==1.5.4                 # conda 대신 pip로 설치 (미러 이슈 회피)
+      - yacs==0.1.8
+      - einops==0.3.0
+      - timm==0.4.5
+      - opencv-python-headless==4.5.2.52   # GUI 없으면 headless 권장
+      - scikit-image==0.17.2
+      - scikit-learn==0.24.2
+      - tensorboard==2.4.1
+      - tabulate==0.8.7
