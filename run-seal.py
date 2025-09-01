@@ -496,7 +496,7 @@ if not args.evaluate:
 
             # Pairwise energy regularization
             pair_loss = pairwise_energy_margin(
-                energies, args.energy_pair_kappa, window=args.energy_pair_window
+                energies, predicted_3d_pos, args.energy_pair_kappa, window=args.energy_pair_window
             )
 
             # Combine losses

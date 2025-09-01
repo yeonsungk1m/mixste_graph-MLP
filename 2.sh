@@ -10,5 +10,5 @@
 #SBATCH --output=logs/%A_out.log
 #SBATCH --error=logs/%A_error.log
 
-python run-seal.py -k gt -f 243 -s 243 -l log/run -c checkpoint/243-cpn-gt-seal13_loss2 -gpu 0 \
+python run-seal.py -k gt -f 243 -s 243 -l log/run -c checkpoint/243-cpn-gt-seal13_use_mpjpe_3 -gpu 0 \
 	--lr_loss 1e-4 --energy_weight 1e-5 --em_loss_type margin --margin_type mpjpe --energy_pair_weight 1e-5 --energy_pair_kappa 1.0 --energy_pair_window 3

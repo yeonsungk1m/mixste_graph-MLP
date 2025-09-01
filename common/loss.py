@@ -104,7 +104,10 @@ def mean_velocity_error(predicted, target, axis=0):
     return np.mean(np.linalg.norm(velocity_predicted - velocity_target, axis=len(target.shape)-1))
 
 def pairwise_energy_margin(
-    energies: torch.Tensor, kappa: float, window: int = 1
+    energies: torch.Tensor,
+    poses: torch.Tensor,
+    kappa: float,
+    window: int = 1,
 ) -> torch.Tensor:
     """Pairwise energy regularization.
 
@@ -112,12 +115,17 @@ def pairwise_energy_margin(
     pair of starting timestamps ``t`` and ``s`` with window-averaged energies
     ``Ē_t`` and ``Ē_s``:
 
-    ``L_pair(t,s) = max(0, |Ē_t - Ē_s| - kappa * |t - s|)``
+    ``L_pair(t,s) = max(0, |Ē_t - Ē_s| - kappa * MPJPE(x̄_t, x̄_s))``
+
+    where ``x̄_t`` and ``x̄_s`` are the mean poses within the sampled windows
+    and MPJPE denotes the mean per-joint position error between them.
 
     Args:
         energies: Tensor of shape ``(B, T)`` containing per-frame energies.
+        poses:    Tensor of shape ``(B, T, J, 3)`` containing 3D joint positions
+                  corresponding to the same frames as ``energies``.
         kappa:    Positive margin slope. Larger values allow greater variation
-                  for distant frame pairs.
+                  for dissimilar pose pairs.
         window:   Number of consecutive frames to average starting at each
                   sampled index.
 
@@ -126,6 +134,7 @@ def pairwise_energy_margin(
         sampled pairs.
     """
     assert energies.dim() == 2, "energies must be (B,T)"
+    assert poses.dim() == 4, "poses must be (B,T,J,3)"
     B, T = energies.shape
     if T < 2 or window < 1:
         return energies.new_tensor(0.0)
@@ -144,10 +153,14 @@ def pairwise_energy_margin(
 
     e_t = energies[batch_idx, t.unsqueeze(1) + offsets].mean(dim=1)
     e_s = energies[batch_idx, s.unsqueeze(1) + offsets].mean(dim=1)
+    
+    # Average poses within the same windows
+    x_t = poses[batch_idx, t.unsqueeze(1) + offsets].mean(dim=1)
+    x_s = poses[batch_idx, s.unsqueeze(1) + offsets].mean(dim=1)
 
     diff = torch.abs(e_t - e_s)
-    delta = torch.abs(t - s).float()
-    margin = kappa * delta
+    pose_dist = torch.norm(x_t - x_s, dim=-1).mean(dim=-1)
+    margin = kappa * pose_dist
     loss = F.relu(diff - margin)
     return loss.mean()
 
