@@ -26,7 +26,7 @@ from copy import deepcopy
 
 from common.camera import *
 import collections
-from loss_net import ContinuousGraphLossNet, MarginBasedLoss, NCELoss, adj_from_parents
+from common.loss_net import ContinuousGraphLossNet, MarginBasedLoss, NCELoss, adj_from_parents
 from common.model_cross import *
 
 from common.loss import *
@@ -488,13 +488,23 @@ if not args.evaluate:
 
             # loss_total = (loss_3d_pos[:,1:] + loss_diff)
             loss_total = loss_3d_pos + loss_diff
-            
-            # print(inputs_3d.shape, predicted_3d_pos.shape) # delete
-            loss_energy = model_loss(inputs_2d, predicted_3d_pos).mean()
-            
-            # print(loss_total.shape, loss_energy.shape) # delete
+            # Per-frame energy from loss network
+            energies = model_loss(inputs_2d, predicted_3d_pos)
+            B, T = inputs_3d.shape[:2]
+            energies = energies.view(B, T)
+            loss_energy = energies.mean()
 
-            loss_for_backward = loss_total + loss_energy * args.energy_weight
+            # Pairwise energy regularization
+            pair_loss = pairwise_energy_margin(
+                energies, args.energy_pair_kappa, window=args.energy_pair_window
+            )
+
+            # Combine losses
+            loss_for_backward = (
+                loss_total
+                + loss_energy * args.energy_weight
+                + pair_loss * args.energy_pair_weight
+            )
             
             loss_for_backward.backward(loss_for_backward.clone().detach())
 

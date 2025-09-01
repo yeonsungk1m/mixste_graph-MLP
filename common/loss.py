@@ -1,6 +1,7 @@
 from matplotlib.pyplot import bone
 import torch
 import numpy as np
+import torch.nn.functional as F
 
 def mpjpe(predicted, target, return_joints_err=False):
     """
@@ -101,6 +102,54 @@ def mean_velocity_error(predicted, target, axis=0):
     velocity_target = np.diff(target, axis=axis)
     
     return np.mean(np.linalg.norm(velocity_predicted - velocity_target, axis=len(target.shape)-1))
+
+def pairwise_energy_margin(
+    energies: torch.Tensor, kappa: float, window: int = 1
+) -> torch.Tensor:
+    """Pairwise energy regularization.
+
+    Penalizes large energy differences between frames. For a randomly sampled
+    pair of starting timestamps ``t`` and ``s`` with window-averaged energies
+    ``Ē_t`` and ``Ē_s``:
+
+    ``L_pair(t,s) = max(0, |Ē_t - Ē_s| - kappa * |t - s|)``
+
+    Args:
+        energies: Tensor of shape ``(B, T)`` containing per-frame energies.
+        kappa:    Positive margin slope. Larger values allow greater variation
+                  for distant frame pairs.
+        window:   Number of consecutive frames to average starting at each
+                  sampled index.
+
+    Returns:
+        Scalar tensor containing the average margin loss over the batch for the
+        sampled pairs.
+    """
+    assert energies.dim() == 2, "energies must be (B,T)"
+    B, T = energies.shape
+    if T < 2 or window < 1:
+        return energies.new_tensor(0.0)
+
+    max_start = T - window + 1
+    if max_start < 2:
+        return energies.new_tensor(0.0)
+
+    # Sample two distinct window start indices for each sequence in the batch
+    t = torch.randint(max_start, (B,), device=energies.device)
+    s = torch.randint(max_start - 1, (B,), device=energies.device)
+    s = s + (s >= t).long()  # ensure s != t
+
+    offsets = torch.arange(window, device=energies.device).view(1, -1)
+    batch_idx = torch.arange(B, device=energies.device).view(-1, 1)
+
+    e_t = energies[batch_idx, t.unsqueeze(1) + offsets].mean(dim=1)
+    e_s = energies[batch_idx, s.unsqueeze(1) + offsets].mean(dim=1)
+
+    diff = torch.abs(e_t - e_s)
+    delta = torch.abs(t - s).float()
+    margin = kappa * delta
+    loss = F.relu(diff - margin)
+    return loss.mean()
 
 def sym_penalty(dataset,keypoints,pred_out):
     """

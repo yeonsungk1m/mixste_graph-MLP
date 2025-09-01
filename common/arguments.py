@@ -106,7 +106,9 @@ def parse_args():
     parser.add_argument('--energy_weight', type=float, default=1e-5)
     parser.add_argument('--em_loss_type', type=str, default='nce')
     parser.add_argument('--margin_type', type=str, default='l1')
-    
+    parser.add_argument('--energy_pair_weight', type=float, default=0.0)
+    parser.add_argument('--energy_pair_kappa', type=float, default=1.0)
+    parser.add_argument('--energy_pair_window', type=int, default=1)
 
     args = parser.parse_args()
     # Check invalid configuration

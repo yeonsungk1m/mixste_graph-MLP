@@ -1,0 +1,14 @@
+#!/bin/bash
+#SBATCH --job-name=MIXSTE
+#SBATCH --partition=gpu-1farm        # 보장 파티션
+#SBATCH --gres=gpu:1             # H100 4장
+#SBATCH --nodes=1
+#SBATCH --ntasks=1                    # torchrun에서 nproc_per_node로 제어
+#SBATCH --cpus-per-task=4             # DataLoader용 스레드 권장치
+#SBATCH --mem=24G
+#SBATCH --time=7-00:00:00
+#SBATCH --output=logs/%A_out.log
+#SBATCH --error=logs/%A_error.log
+
+python run.py -k cpn_ft_h36m_dbb -c /data/yeonsungkim/pose_estimation_Mixste_pairloss_window/checkpoint/243-cpn-gt-seal13_loss1 \
+    --evaluate best_epoch.bin -f 243 -s 243
