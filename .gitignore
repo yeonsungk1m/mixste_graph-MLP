@@ -132,3 +132,7 @@ dmypy.json
 data/
 log/
 *.bin
+logs/
+*.sh
+*.txt
+checkpoint/
