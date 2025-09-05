@@ -421,12 +421,19 @@ if not args.evaluate:
 
             energy_hat = model_loss(inputs_2d, predicted_3d_pos)
             energy_label = model_loss(inputs_2d, inputs_3d)
+            B, T = inputs_3d.shape[:2]
+            pair_loss_lossnet = pairwise_energy_margin(
+                energy_hat.view(B, T),
+                inputs_3d,
+                args.energy_pair_kappa,
+                window=args.energy_pair_window,
+            )
             loss_loss_net = loss_fn_loss(
                 predicted_3d_pos,
                 inputs_3d,
                 energy_hat,
                 energy_label,
-            )
+            ) + pair_loss_lossnet * args.energy_pair_weight
             
             optimizer_loss.zero_grad()
             loss_loss_net.backward()
@@ -488,23 +495,13 @@ if not args.evaluate:
 
             # loss_total = (loss_3d_pos[:,1:] + loss_diff)
             loss_total = loss_3d_pos + loss_diff
-            # Per-frame energy from loss network
-            energies = model_loss(inputs_2d, predicted_3d_pos)
-            B, T = inputs_3d.shape[:2]
-            energies = energies.view(B, T)
-            loss_energy = energies.mean()
+            
+            # print(inputs_3d.shape, predicted_3d_pos.shape) # delete
+            loss_energy = model_loss(inputs_2d, predicted_3d_pos).mean()
+            
+            # print(loss_total.shape, loss_energy.shape) # delete
 
-            # Pairwise energy regularization
-            pair_loss = pairwise_energy_margin(
-                energies, predicted_3d_pos, args.energy_pair_kappa, window=args.energy_pair_window
-            )
-
-            # Combine losses
-            loss_for_backward = (
-                loss_total
-                + loss_energy * args.energy_weight
-                + pair_loss * args.energy_pair_weight
-            )
+            loss_for_backward = loss_total + loss_energy * args.energy_weight
             
             loss_for_backward.backward(loss_for_backward.clone().detach())
 
