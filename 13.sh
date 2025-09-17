@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24           # 4개 프로세스 × 4코어 = 16
 #SBATCH --mem=64G                    # 4실험 동시 실행이면 48~64G 권장
-#SBATCH --time=7-00:00:00
+#SBATCH --time=24:00:00
 #SBATCH --output=logs/%A_out.log
 #SBATCH --error=logs/%A_err.log
 
@@ -15,7 +15,7 @@ set -euo pipefail
 mkdir -p logs
 
 # ---- 실험 큐: 여기만 편집하세요 ----
-WINDOWS=(1 5 7 10 15 20 25 30)  # 예: 총 16개(= 34h × 4웨이브)
+WINDOWS=(5 7 10 15)  # 예: 총 16개(= 34h × 4웨이브)
 MAX_PARALLEL=4
 PER_STEP_CPUS=6
 LOGDIR_PREFIX="log/run"    # 파이썬 스크립트 내부 로그 디렉토리
