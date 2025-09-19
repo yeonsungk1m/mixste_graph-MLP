@@ -26,7 +26,13 @@ from copy import deepcopy
 
 from common.camera import *
 import collections
-from common.loss_net import ContinuousGraphLossNet, MarginBasedLoss, NCELoss, adj_from_parents
+from common.loss_net import (
+    ContinuousGraphLossNet,
+    LinearLossNet,
+    MarginBasedLoss,
+    NCELoss,
+    adj_from_parents,
+)
 from common.model_cross import *
 
 from common.loss import *
@@ -236,13 +242,28 @@ model_pos =  MixSTE2(num_frame=receptive_field, num_joints=num_joints, in_chans=
         num_heads=8, mlp_ratio=2., qkv_bias=True, qk_scale=None,drop_path_rate=0)
 
 parents = dataset.skeleton().parents()
-A = adj_from_parents(parents).cuda()
-model_loss = ContinuousGraphLossNet(
-    adj=A, num_joints=num_joints,
-    d_model=256, nhead=8, depth=4, mlp_ratio=2.0, dropout=0.1,
-    use_degree_bias=True, use_distance_bias=True, distance_gamma_init=0.8,
-    vnode_spd_mode="replace",
-)
+lossnet_type = args.lossnet_type.lower()
+if lossnet_type == 'graph':
+    A = adj_from_parents(parents)
+    if torch.cuda.is_available():
+        A = A.cuda()
+    model_loss = ContinuousGraphLossNet(
+        adj=A, num_joints=num_joints,
+        d_model=256, nhead=8, depth=4, mlp_ratio=2.0, dropout=0.1,
+        use_degree_bias=True, use_distance_bias=True, distance_gamma_init=0.8,
+        vnode_spd_mode="replace",
+    )
+elif lossnet_type == 'linear':
+    model_loss = LinearLossNet(
+        linear_size=args.lossnet_linear_size,
+        num_stage=args.lossnet_linear_stage,
+        p_dropout=args.lossnet_linear_dropout,
+        num_joints=num_joints,
+        num_joints_partial=num_joints,
+        batch_norm=not args.lossnet_linear_no_bn,
+    )
+else:
+    raise ValueError(f"Unknown lossnet type: {args.lossnet_type}")
 
 ################ load weight ########################
 # posetrans_checkpoint = torch.load('./checkpoint/pretrained_posetrans.bin', map_location=lambda storage, loc: storage)
@@ -421,19 +442,24 @@ if not args.evaluate:
 
             energy_hat = model_loss(inputs_2d, predicted_3d_pos)
             energy_label = model_loss(inputs_2d, inputs_3d)
-            B, T = inputs_3d.shape[:2]
-            pair_loss_lossnet = pairwise_energy_margin(
-                energy_hat.view(B, T),
-                inputs_3d,
-                args.energy_pair_kappa,
-                window=args.energy_pair_window,
-            )
+            pair_loss_lossnet = None
+            if args.use_energy_pair and args.energy_pair_weight != 0.0:
+                B, T = inputs_3d.shape[:2]
+                pair_loss_lossnet = pairwise_energy_margin(
+                    energy_hat.view(B, T),
+                    inputs_3d,
+                    args.energy_pair_kappa,
+                    window=args.energy_pair_window,
+                )
             loss_loss_net = loss_fn_loss(
                 predicted_3d_pos,
                 inputs_3d,
                 energy_hat,
                 energy_label,
-            ) + pair_loss_lossnet * args.energy_pair_weight
+            )
+
+            if pair_loss_lossnet is not None:
+                loss_loss_net = loss_loss_net + pair_loss_lossnet * args.energy_pair_weight 
             
             optimizer_loss.zero_grad()
             loss_loss_net.backward()

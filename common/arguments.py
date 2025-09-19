@@ -28,12 +28,22 @@ def parse_args():
                         help='create a checkpoint every N epochs')
     parser.add_argument('-r', '--resume', default='', type=str, metavar='FILENAME',
                         help='checkpoint to resume (file name)')
+    parser.set_defaults(use_energy_pair=True)
     parser.add_argument('--nolog', action='store_true', help='forbiden log function')
     parser.add_argument('--evaluate', default='', type=str, metavar='FILENAME', help='checkpoint to evaluate (file name)')
     parser.add_argument('--render', action='store_true', help='visualize a particular video')
     parser.add_argument('--by-subject', action='store_true', help='break down error by subject (on evaluation)')
     parser.add_argument('--export-training-curves', action='store_true', help='save training curves as .png images')
-
+    parser.add_argument('--lossnet-type', type=str, default='graph', choices=['graph', 'linear'],
+                        help='architecture of the energy model used for loss learning')
+    parser.add_argument('--lossnet-linear-size', type=int, default=1024,
+                        help='hidden feature size for the linear loss network')
+    parser.add_argument('--lossnet-linear-stage', type=int, default=2,
+                        help='number of residual stages in the linear loss network')
+    parser.add_argument('--lossnet-linear-dropout', type=float, default=0.5,
+                        help='dropout probability for the linear loss network')
+    parser.add_argument('--lossnet-linear-no-bn', action='store_true',
+                        help='disable batch normalization layers in the linear loss network')
 
     # Model arguments
     parser.add_argument('-s', '--stride', default=1, type=int, metavar='N', help='chunk size to use during training')

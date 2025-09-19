@@ -50,7 +50,115 @@ def floyd_warshall(adj: torch.Tensor) -> torch.Tensor:
     for k in range(N):
         dist = torch.minimum(dist, dist[:, k:k+1] + dist[k:k+1, :])
     return dist
+    
+# -----------------------------------------------------------------------------
+# Simple Linear LossNet (MLP-based)
+# -----------------------------------------------------------------------------
+class LinearBlock(nn.Module):
+    def __init__(self, hidden_size: int, p_dropout: float = 0.5, batch_norm: bool = True):
+        super().__init__()
+        self.batch_norm = batch_norm
+        self.fc1 = nn.Linear(hidden_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        if batch_norm:
+            self.bn1 = nn.BatchNorm1d(hidden_size)
+            self.bn2 = nn.BatchNorm1d(hidden_size)
+        else:
+            self.bn1 = None
+            self.bn2 = None
+        self.relu = nn.ReLU(inplace=True)
+        self.dropout = nn.Dropout(p_dropout)
 
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.fc1(x)
+        if self.bn1 is not None:
+            y = self.bn1(y)
+        y = self.relu(y)
+        y = self.dropout(y)
+
+        y = self.fc2(y)
+        if self.bn2 is not None:
+            y = self.bn2(y)
+        y = self.relu(y)
+        y = self.dropout(y)
+        return x + y
+
+
+class LinearLossNet(nn.Module):
+    """
+    Lightweight MLP loss network used in prior work.
+
+    Accepts the same inputs as ContinuousGraphLossNet but processes them
+    with stacked residual linear blocks instead of graph attention.
+    """
+
+    def __init__(
+        self,
+        *,
+        linear_size: int = 1024,
+        num_stage: int = 2,
+        p_dropout: float = 0.5,
+        num_joints: int = 16,
+        num_joints_partial: Optional[int] = None,
+        batch_norm: bool = True,
+    ):
+        super().__init__()
+        self.linear_size = linear_size
+        self.num_stage = num_stage
+        self.dropout = nn.Dropout(p_dropout)
+        self.relu = nn.ReLU(inplace=True)
+        self.batch_norm = batch_norm
+        self.num_joints = num_joints
+        self.num_joints_partial = num_joints_partial if num_joints_partial is not None else num_joints
+
+        input_dim = num_joints * 2 + self.num_joints_partial * 3
+        self.input_proj = nn.Linear(input_dim, linear_size)
+        if batch_norm:
+            self.input_bn = nn.BatchNorm1d(linear_size)
+        else:
+            self.input_bn = None
+
+        self.blocks = nn.ModuleList(
+            [LinearBlock(linear_size, p_dropout=p_dropout, batch_norm=batch_norm) for _ in range(num_stage)]
+        )
+
+        self.head = nn.Linear(linear_size, 1)
+
+    @staticmethod
+    def _reshape_input(tensor: torch.Tensor, num_joints: int, channels: int) -> torch.Tensor:
+        if tensor.dim() == 4:
+            tensor = tensor.reshape(-1, num_joints, channels)
+        elif tensor.dim() == 2:
+            tensor = tensor.view(tensor.size(0), num_joints, channels)
+        elif tensor.dim() != 3:
+            raise ValueError(f"Unexpected input shape {tensor.shape}")
+
+        if tensor.size(1) != num_joints or tensor.size(-1) != channels:
+            raise ValueError(
+                f"Expected shape (*,{num_joints},{channels}) but got {tensor.shape}"
+            )
+        return tensor
+
+    def forward(self, x2d: torch.Tensor, y3d: torch.Tensor) -> torch.Tensor:
+        x2d = self._reshape_input(x2d, self.num_joints, 2)
+        y3d = self._reshape_input(y3d, self.num_joints_partial, 3)
+
+        B = x2d.size(0)
+        x_flat = x2d.reshape(B, -1)
+        y_flat = y3d.reshape(B, -1)
+        h = torch.cat([x_flat, y_flat], dim=-1)
+
+        h = self.input_proj(h)
+        if self.input_bn is not None:
+            h = self.input_bn(h)
+        h = self.relu(h)
+        h = self.dropout(h)
+
+        for block in self.blocks:
+            h = block(h)
+
+        energy = self.head(h)
+        return energy.view(-1, 1)
 
 # -----------------------------------------------------------------------------
 # Attention Bias Builder
